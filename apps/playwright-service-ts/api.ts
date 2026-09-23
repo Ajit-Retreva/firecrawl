@@ -13,6 +13,7 @@ import { getError } from './helpers/get_error';
 import { lookup } from 'dns/promises';
 import IPAddr from 'ipaddr.js';
 import { Server, RequestError } from 'proxy-chain';
+import { Action, ScreenshotOptions, actionTypes, runActions, takeScreenshot } from './browser-actions';
 
 dotenv.config();
 
@@ -182,6 +183,8 @@ interface UrlModel {
   headers?: { [key: string]: string };
   check_selector?: string;
   skip_tls_verification?: boolean;
+  actions?: Action[];
+  screenshot?: ScreenshotOptions;
 }
 
 let browser: Browser;
@@ -377,7 +380,17 @@ app.post('/scrape', async (req: Request, res: Response) => {
     headers,
     check_selector,
     skip_tls_verification = false,
+    actions,
+    screenshot,
   }: UrlModel = req.body;
+
+  if (actions !== undefined && (!Array.isArray(actions) || actions.length > 50 ||
+      actions.some(action => !action || !actionTypes.has(action.type)))) {
+    return res.status(400).json({ error: 'Invalid or unsupported browser actions' });
+  }
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return res.status(400).json({ error: 'timeout must be positive' });
+  }
 
   console.log(`================= Scrape Request =================`);
   console.log(`URL: ${url}`);
@@ -424,6 +437,7 @@ app.post('/scrape', async (req: Request, res: Response) => {
   let requestContext: BrowserContext | null = null;
   let securityState: ContextSecurityState | null = null;
   let page: Page | null = null;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
 
   try {
     // Extract user-agent from request headers (case-insensitive) so it can
@@ -440,8 +454,14 @@ app.post('/scrape', async (req: Request, res: Response) => {
       userAgentOverride,
     );
     requestContext = contextBundle.context;
+    // Close the entire isolated context at the deadline, including stuck JS.
+    deadlineTimer = setTimeout(() => {
+      void requestContext?.close().catch(() => {});
+    }, timeout);
     securityState = contextBundle.securityState;
     page = await requestContext.newPage();
+    page.setDefaultTimeout(timeout);
+    page.setDefaultNavigationTimeout(timeout);
 
     if (headers) {
       // A Cookie header passed through setExtraHTTPHeaders is sent on the first
@@ -522,6 +542,12 @@ app.post('/scrape', async (req: Request, res: Response) => {
       check_selector,
       securityState,
     );
+    const actionResults = actions?.length ? await runActions(page, actions) : undefined;
+    if (actionResults) result.content = await page.content();
+    const screenshotResult = screenshot ? await takeScreenshot(page, screenshot) : undefined;
+    if (securityState.blockedNavigationRequestUrl) {
+      throw new InsecureConnectionError(securityState.blockedNavigationRequestUrl, 'blocked action navigation');
+    }
     const pageError =
       result.status !== 200 ? getError(result.status) : undefined;
 
@@ -537,6 +563,9 @@ app.post('/scrape', async (req: Request, res: Response) => {
       content: result.content,
       pageStatusCode: result.status,
       contentType: result.contentType,
+      url: page.url(),
+      ...(screenshotResult && { screenshot: screenshotResult }),
+      ...(actionResults && { actions: actionResults }),
       ...(pageError && { pageError }),
     });
   } catch (error) {
@@ -552,9 +581,12 @@ app.post('/scrape', async (req: Request, res: Response) => {
       .status(500)
       .json({ error: 'An error occurred while fetching the page.' });
   } finally {
-    if (page) await page.close();
-    if (requestContext) await requestContext.close();
-    pageSemaphore.release();
+    clearTimeout(deadlineTimer);
+    try {
+      if (requestContext) await requestContext.close();
+    } finally {
+      pageSemaphore.release();
+    }
   }
 });
 
