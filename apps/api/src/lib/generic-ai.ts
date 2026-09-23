@@ -54,6 +54,8 @@ const providerList: Record<Provider, any> = {
 };
 
 export function getModel(name: string, provider: Provider = defaultProvider) {
+  // Self-hosted Ollama must also cover callers that explicitly select OpenAI.
+  if (config.OLLAMA_BASE_URL) provider = "ollama";
   if (name === "gemini-2.5-pro") {
     name = "gemini-2.5-pro";
   }
@@ -69,6 +71,7 @@ export function getEmbeddingModel(
   name: string,
   provider: Provider = defaultProvider,
 ) {
+  if (config.OLLAMA_BASE_URL) provider = "ollama";
   return config.MODEL_EMBEDDING_NAME
     ? providerList[provider].embedding(config.MODEL_EMBEDDING_NAME)
     : providerList[provider].embedding(name);

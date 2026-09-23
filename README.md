@@ -1,3 +1,7 @@
+> **Local Mac fork:** See [LOCAL_MAC.md](LOCAL_MAC.md) for setup, supported
+> features, tests, and remaining cloud-only gaps. This fork adds Playwright
+> screenshots/actions and a local Ollama/SearXNG configuration.
+
 <h3 align="center">
   <a name="readme-top"></a>
   <img
