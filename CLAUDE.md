@@ -22,7 +22,7 @@ Never bypass `knip` failures (e.g. with `git commit --no-verify`). If the pre-co
 
 ## Engineering standard: Karpathy coding rules
 
-Source: CLAUDE.md in [forrestchang/andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills). Adopted as the Retreva engineering standard. The project-specific instructions above take priority where they conflict.
+Source: CLAUDE.md in [forrestchang/andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills). Adopted as the engineering standard. The project-specific instructions above take priority where they conflict.
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
